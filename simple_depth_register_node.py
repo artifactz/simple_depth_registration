@@ -11,7 +11,8 @@ import time
 class DepthRegisterer(object):
     Intrinsics = namedtuple('Intrinsics', ['fx', 'fy', 'cx', 'cy'])
 
-    def __init__(self, depth_scale=1.0):
+    def __init__(self, x_offset, y_offset, z_offset, depth_scale=1.0):
+        self.extrinsics = x_offset, y_offset, z_offset
         self.intrinsics = {}
         self.depth_scale = depth_scale
         self.pixel_grid = None
@@ -29,48 +30,26 @@ class DepthRegisterer(object):
                 np.array([np.arange(depth_image.shape[0]) for _ in xrange(depth_image.shape[1])]).T,
                 np.array([np.arange(depth_image.shape[1]) for _ in xrange(depth_image.shape[0])])
                 ), axis=2)
-        registered_depth_image = np.zeros(depth_image.shape, dtype=depth_image.dtype)
-        #print self.intrinsics['rgb'], self.intrinsics['depth']
+
+        registered_depth_image = np.zeros(rgb_image.shape[:2], dtype='float64')
+
         fx_rgb, fy_rgb, cx_rgb, cy_rgb = self.intrinsics['rgb']
         fx_d, fy_d, cx_d, cy_d = self.intrinsics['depth']
+        x_offset, y_offset, z_offset = self.extrinsics
 
         valid_depths = depth_image > 0
         valid_pixels = self.pixel_grid[valid_depths]
-        zs = depth_image[valid_depths] / self.depth_scale
-        ys = ((((valid_pixels[:, 0] - cy_d) * zs) / fy_d * fy_rgb / zs + cy_rgb) / rgb_image.shape[0] * depth_image.shape[0]).astype('int')
-        xs = (((((valid_pixels[:, 1] - cx_d) * zs) / fx_d + 0.05) * fx_rgb / zs + cx_rgb) / rgb_image.shape[1] * depth_image.shape[1]).astype('int')
-        valid_positions = np.logical_and(np.logical_and(np.logical_and(ys >= 0, ys < depth_image.shape[0]), xs >= 0), xs < depth_image.shape[1])
-        #print ys[valid_positions]
-        #print xs[valid_positions]
-        #print depth_image[ys[valid_positions], xs[valid_positions]]
-        us, vs = valid_pixels[valid_positions].T
-        registered_depth_image[us, vs] = depth_image[ys[valid_positions], xs[valid_positions]]
-        return registered_depth_image
+        zs = depth_image[valid_depths] / self.depth_scale + z_offset
+        ys = (((((valid_pixels[:, 0] - cy_d) * zs) / fy_d + y_offset) * fy_rgb / zs + cy_rgb)).astype('int')
+        xs = (((((valid_pixels[:, 1] - cx_d) * zs) / fx_d + x_offset) * fx_rgb / zs + cx_rgb)).astype('int')
+        valid_positions = np.logical_and(np.logical_and(np.logical_and(ys >= 0, ys < registered_depth_image.shape[0]), xs >= 0), xs < registered_depth_image.shape[1])
 
-        # 360 x 480
-        for u in xrange(depth_image.shape[0]):
-            for v in xrange(depth_image.shape[1]):
-                if depth_image[u, v] == 0:
-                    continue
-                #y = int(((u - cy_d) / fy_d * fy_rgb + cy_rgb) / rgb_image.shape[0] * depth_image.shape[0])
-                #x = int(((v - cx_d) / fx_d * fx_rgb + cx_rgb) / rgb_image.shape[1] * depth_image.shape[1])
-                #if y >= 0 and y < depth_image.shape[0] and x >= 0 and x < depth_image.shape[1]:
-                #    registered_depth_image[u, v] = depth_image[y, x]
-                z = depth_image[u, v] / self.depth_scale
-                y = ((u - cy_d) * z) / fy_d
-                x = ((v - cx_d) * z) / fx_d + 0.05 # 5 cm to the right
-                y_rgb = y * fy_rgb / z + cy_rgb
-                x_rgb = x * fx_rgb / z + cx_rgb
-                y = int(y_rgb / rgb_image.shape[0] * depth_image.shape[0])
-                x = int(x_rgb / rgb_image.shape[1] * depth_image.shape[1])
-                if y >= 0 and y < depth_image.shape[0] and x >= 0 and x < depth_image.shape[1]:
-                    registered_depth_image[u, v] = depth_image[y, x]
+        registered_depth_image[ys[valid_positions], xs[valid_positions]] = zs[valid_positions]
         return registered_depth_image
 
     def process_images(self, **images):
         assert(len(images) == 2 and 'rgb' in images and 'depth' in images)
         assert(self.has_intrinsics('rgb') and self.has_intrinsics('depth'))
-        print 'ok'
         return self.register(images['rgb'], images['depth'])
 
 
@@ -78,7 +57,7 @@ class DepthRegisterNode(object):
     def __init__(self):
         rospy.init_node('simple_depth_register_node')
         self.cv_bridge = CvBridge()
-        self.dr = DepthRegisterer(1000.)
+        self.dr = DepthRegisterer(-0.0589333333, 0, 0, depth_scale=1000.) # -0.0589333333, 0, 0 are the extrinsics (offset rgb cam -> depth cam)
 
         rgb_topic = rospy.get_param('~rgb_topic', '/camera/rgb/image_raw')
         depth_topic = rospy.get_param('~depth_topic', '/camera/depth/image_raw')
@@ -128,13 +107,15 @@ class DepthRegisterNode(object):
         self.pub_info_registered.publish(self.cv_bridge.cv2_to_imgmsg(img_registered_img))
 
     def get_info_images(self):
+        # clip to 5000 millimeters
         depth_image = self.depth_image / 5000. * 255.
         depth_image[depth_image > 255] = 255
         depth_image = cv2.cvtColor(cv2.resize(depth_image.astype('uint8'), (self.rgb_image.shape[1], self.rgb_image.shape[0]), cv2.INTER_NEAREST), cv2.COLOR_GRAY2BGR)
 
-        registered_depth_image = self.registered_depth_image / 5000. * 255.
+        # clip to 5 meters
+        registered_depth_image = self.registered_depth_image.astype(float) * 255. / 5.
         registered_depth_image[registered_depth_image > 255] = 255
-        registered_depth_image = cv2.cvtColor(cv2.resize(registered_depth_image.astype('uint8'), (self.rgb_image.shape[1], self.rgb_image.shape[0]), cv2.INTER_NEAREST), cv2.COLOR_GRAY2BGR)
+        registered_depth_image = cv2.cvtColor(registered_depth_image.astype('uint8'), cv2.COLOR_GRAY2BGR)
 
         return cv2.addWeighted(self.rgb_image, 0.5, depth_image, 0.5, 0), cv2.addWeighted(self.rgb_image, 0.5, registered_depth_image, 0.5, 0)
 
