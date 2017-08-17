@@ -57,7 +57,16 @@ class DepthRegisterNode(object):
     def __init__(self):
         rospy.init_node('simple_depth_register_node')
         self.cv_bridge = CvBridge()
-        self.dr = DepthRegisterer(-0.0589333333, 0, 0, depth_scale=1000.) # -0.0589333333, 0, 0 are the extrinsics (offset rgb cam -> depth cam)
+
+        # extrinsics parameters (offset rgb cam -> depth cam), defaulting to realsense r200 values
+        dx = rospy.get_param('~x_offset', -0.0589333333)
+        dy = rospy.get_param('~y_offset', 0)
+        dz = rospy.get_param('~z_offset', 0)
+
+        # scale in which depth values are presented relative to meters
+        depth_scale = rospy.get_param('~depth_scale', 1000.0) # 1000 is millimeters
+
+        self.dr = DepthRegisterer(dx, dy, dz, depth_scale)
 
         rgb_topic = rospy.get_param('~rgb_topic', '/camera/rgb/image_raw')
         depth_topic = rospy.get_param('~depth_topic', '/camera/depth/image_raw')
