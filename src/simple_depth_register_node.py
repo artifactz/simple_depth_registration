@@ -78,7 +78,7 @@ class DepthRegisterNode(object):
         depth_topic = rospy.get_param('~depth_topic', '/camera/depth/image_raw')
 
         # read cameras' intrinsics
-        rgb_info_topic, depth_info_topic = map(lambda t: t[:t.rfind('/')] + '/camera_info', (rgb_topic, depth_topic))
+        rgb_info_topic, depth_info_topic = [t[:t.rfind('/')] + '/camera_info' for t in (rgb_topic, depth_topic)]
         self.camera_info_callback(rospy.wait_for_message(rgb_info_topic, CameraInfo), 'rgb')
         self.camera_info_callback(rospy.wait_for_message(depth_info_topic, CameraInfo), 'depth')
         rospy.loginfo('camera calibration data OK')
