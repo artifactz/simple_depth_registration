@@ -10,6 +10,8 @@ from collections import namedtuple
 
 
 class DepthRegisterer(object):
+    '''class holding the camera setup and performing the actual depth registration'''
+
     Intrinsics = namedtuple('Intrinsics', ['fx', 'fy', 'cx', 'cy'])
 
     def __init__(self, x_offset=0, y_offset=0, z_offset=0, depth_scale=1.0):
@@ -55,6 +57,8 @@ class DepthRegisterer(object):
 
 
 class DepthRegisterNode(object):
+    '''class holding and performing ROS-related stuff like subscriptions, publishing, parameters and callbacks'''
+
     def __init__(self):
         rospy.init_node('simple_depth_register_node')
         self.cv_bridge = CvBridge()
@@ -105,7 +109,7 @@ class DepthRegisterNode(object):
 
     def image_pair_callback(self, msg_rgb_image, msg_depth_image):
         '''makes the depth registerer process the image pair and produces output images'''
-        # import
+        # convert images ROS -> OpenCV
         try:
             self.rgb_image = self.cv_bridge.imgmsg_to_cv2(msg_rgb_image) # actually a "BGR image" (OpenCV...)
         except CvBridgeError as e:
@@ -117,17 +121,24 @@ class DepthRegisterNode(object):
             rospy.logwarn('error converting depth image: %s' % e)
             return
 
-        # processing
-        self.registered_depth_image = self.dr.register(self.rgb_image, self.depth_image)
-        # export
-        msg = self.cv_bridge.cv2_to_imgmsg(self.registered_depth_image)
-        msg.header.stamp = msg_depth_image.header.stamp
-        self.pub.publish(msg)
+        # be lazy, check subscriber count first
+        has_depth_subs = self.pub.get_num_connections() > 0
+        has_info_subs = (self.pub_info_unregistered.get_num_connections() + self.pub_info_registered.get_num_connections()) > 0
+        has_subs = has_depth_subs or has_info_subs
 
-        # info images
-        img_unregistered_img, img_registered_img = self.get_info_images()
-        self.pub_info_unregistered.publish(self.cv_bridge.cv2_to_imgmsg(img_unregistered_img))
-        self.pub_info_registered.publish(self.cv_bridge.cv2_to_imgmsg(img_registered_img))
+        if has_subs:
+            # processing
+            self.registered_depth_image = self.dr.register(self.rgb_image, self.depth_image)
+            # convert image OpenCV -> ROS and send out
+            msg = self.cv_bridge.cv2_to_imgmsg(self.registered_depth_image)
+            msg.header.stamp = msg_depth_image.header.stamp
+            self.pub.publish(msg)
+
+            if has_info_subs:
+                # send out info images
+                img_unregistered_img, img_registered_img = self.get_info_images()
+                self.pub_info_unregistered.publish(self.cv_bridge.cv2_to_imgmsg(img_unregistered_img))
+                self.pub_info_registered.publish(self.cv_bridge.cv2_to_imgmsg(img_registered_img))
 
     def get_info_images(self):
         '''generates one registered and one unregistered blended image of rgb and depth image'''
