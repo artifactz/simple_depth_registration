@@ -86,8 +86,11 @@ class DepthRegisterNode(object):
         self.sub.registerCallback(self.image_pair_callback)
         rospy.loginfo('synchronized subscriber OK')
 
+        # registered depth image output topic name
+        registered_topic = rospy.get_param('~registered_topic', '~depth_registered')
+
         # announce output topics
-        self.pub = rospy.Publisher('~depth_registered', Image, queue_size=5)
+        self.pub = rospy.Publisher(registered_topic, Image, queue_size=5)
         self.pub_info_unregistered = rospy.Publisher('~info_image_unregistered', Image, queue_size=5)
         self.pub_info_registered = rospy.Publisher('~info_image_registered', Image, queue_size=5)
 

@@ -5,6 +5,9 @@
     <param name="rgb_topic" value="/camera/rgb/image_raw" />
     <param name="depth_topic" value="/camera/depth/image_raw" />
 
+    <!-- output topic -->
+    <param name="registered_topic" value="~depth_registered" />
+
     <!-- extrinsics -->
     <param name="x_offset" value="-0.0589333333" />
     <param name="y_offset" value="0" />
