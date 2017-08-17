@@ -1,0 +1,13 @@
+<!-- example launch file -->
+<launch>
+  <node pkg="simple_depth_registration" type="simple_depth_register_node.py" name="simple_depth_register_node" output="screen">
+    <!-- input topics -->
+    <param name="rgb_topic" value="/camera/rgb/image_raw" />
+    <param name="depth_topic" value="/camera/depth/image_raw" />
+
+    <!-- extrinsics -->
+    <param name="x_offset" value="-0.0589333333" />
+    <param name="y_offset" value="0" />
+    <param name="z_offset" value="0" />
+  </node>
+</launch>
