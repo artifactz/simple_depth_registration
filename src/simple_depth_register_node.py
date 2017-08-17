@@ -142,18 +142,21 @@ class DepthRegisterNode(object):
 
     def get_info_images(self):
         '''generates one registered and one unregistered blended image of rgb and depth image'''
-        # clip to 5 meters
-        depth_image = self.depth_image / (5. * self.dr.depth_scale) * 255.
+        # clip depth values to a certain maximum and scale constantly wrt. this value to avoid jitter
+        clipping_distance = 5. # meters
+        # clip
+        depth_image = self.depth_image / (clipping_distance * self.dr.depth_scale) * 255.
         depth_image[depth_image > 255] = 255
         # resize to fit rgb image and convert to 24-bit bgr
         depth_image = cv2.cvtColor(cv2.resize(depth_image.astype('uint8'), (self.rgb_image.shape[1], self.rgb_image.shape[0]), cv2.INTER_NEAREST), cv2.COLOR_GRAY2BGR)
 
-        # clip to 5 meters
-        registered_depth_image = self.registered_depth_image.astype(float) * 255. / 5.
+        # clip
+        registered_depth_image = self.registered_depth_image.astype(float) * 255. / clipping_distance
         registered_depth_image[registered_depth_image > 255] = 255
         # convert to 24-bit bgr
         registered_depth_image = cv2.cvtColor(registered_depth_image.astype('uint8'), cv2.COLOR_GRAY2BGR)
 
+        # blend
         return cv2.addWeighted(self.rgb_image, 0.5, depth_image, 0.5, 0), cv2.addWeighted(self.rgb_image, 0.5, registered_depth_image, 0.5, 0)
 
     def spin(self):
