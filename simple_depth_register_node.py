@@ -6,12 +6,11 @@ from sensor_msgs.msg import Image, CameraInfo
 import message_filters
 from collections import namedtuple
 
-import time
 
 class DepthRegisterer(object):
     Intrinsics = namedtuple('Intrinsics', ['fx', 'fy', 'cx', 'cy'])
 
-    def __init__(self, x_offset, y_offset, z_offset, depth_scale=1.0):
+    def __init__(self, x_offset=0, y_offset=0, z_offset=0, depth_scale=1.0):
         self.extrinsics = x_offset, y_offset, z_offset
         self.intrinsics = {}
         self.depth_scale = depth_scale
@@ -25,7 +24,6 @@ class DepthRegisterer(object):
 
     def register(self, rgb_image, depth_image):
         if self.pixel_grid is None:
-            t0 = time.time()
             self.pixel_grid = np.stack((
                 np.array([np.arange(depth_image.shape[0]) for _ in xrange(depth_image.shape[1])]).T,
                 np.array([np.arange(depth_image.shape[1]) for _ in xrange(depth_image.shape[0])])
@@ -46,11 +44,6 @@ class DepthRegisterer(object):
 
         registered_depth_image[ys[valid_positions], xs[valid_positions]] = zs[valid_positions]
         return registered_depth_image
-
-    def process_images(self, **images):
-        assert(len(images) == 2 and 'rgb' in images and 'depth' in images)
-        assert(self.has_intrinsics('rgb') and self.has_intrinsics('depth'))
-        return self.register(images['rgb'], images['depth'])
 
 
 class DepthRegisterNode(object):
@@ -82,9 +75,9 @@ class DepthRegisterNode(object):
         self.sub.registerCallback(self.image_pair_callback)
         rospy.loginfo('synchronized subscriber OK')
 
-        self.pub = rospy.Publisher('/simple_depth_register_node/depth_registered', Image, queue_size=5)
-        self.pub_info_unregistered = rospy.Publisher('/simple_depth_register_node/info_image_unregistered', Image, queue_size=5)
-        self.pub_info_registered = rospy.Publisher('/simple_depth_register_node/info_image_registered', Image, queue_size=5)
+        self.pub = rospy.Publisher('~depth_registered', Image, queue_size=5)
+        self.pub_info_unregistered = rospy.Publisher('~info_image_unregistered', Image, queue_size=5)
+        self.pub_info_registered = rospy.Publisher('~info_image_registered', Image, queue_size=5)
 
         self.rgb_image = None
         self.depth_image = None
@@ -106,7 +99,7 @@ class DepthRegisterNode(object):
             rospy.logwarn('error converting depth image: %s' % e)
             return
 
-        self.registered_depth_image = self.dr.process_images(rgb=self.rgb_image, depth=self.depth_image)
+        self.registered_depth_image = self.dr.register(self.rgb_image, self.depth_image)
         msg = self.cv_bridge.cv2_to_imgmsg(self.registered_depth_image)
         msg.header.stamp = msg_depth_image.header.stamp
         self.pub.publish(msg)
@@ -116,8 +109,8 @@ class DepthRegisterNode(object):
         self.pub_info_registered.publish(self.cv_bridge.cv2_to_imgmsg(img_registered_img))
 
     def get_info_images(self):
-        # clip to 5000 millimeters
-        depth_image = self.depth_image / 5000. * 255.
+        # clip to 5 meters
+        depth_image = self.depth_image / (5. * self.dr.depth_scale) * 255.
         depth_image[depth_image > 255] = 255
         depth_image = cv2.cvtColor(cv2.resize(depth_image.astype('uint8'), (self.rgb_image.shape[1], self.rgb_image.shape[0]), cv2.INTER_NEAREST), cv2.COLOR_GRAY2BGR)
 
