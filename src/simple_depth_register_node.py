@@ -36,7 +36,7 @@ class DepthRegisterer(object):
                 np.array([np.arange(depth_image.shape[1]) for _ in xrange(depth_image.shape[0])])
                 ), axis=2)
 
-        registered_depth_image = np.zeros(rgb_image.shape[:2], dtype='float64')
+        registered_depth_image = np.zeros(rgb_image.shape[:2], dtype='float32')
 
         fx_rgb, fy_rgb, cx_rgb, cy_rgb = self.intrinsics['rgb']
         fx_d, fy_d, cx_d, cy_d = self.intrinsics['depth']
@@ -111,7 +111,7 @@ class DepthRegisterNode(object):
         '''makes the depth registerer process the image pair and produces output images'''
         # convert images ROS -> OpenCV
         try:
-            self.rgb_image = self.cv_bridge.imgmsg_to_cv2(msg_rgb_image) # actually a "BGR image" (OpenCV...)
+            self.rgb_image = self.cv_bridge.imgmsg_to_cv2(msg_rgb_image, "rgb8")
         except CvBridgeError as e:
             rospy.logwarn('error converting rgb image: %s' % e)
             return
@@ -137,8 +137,8 @@ class DepthRegisterNode(object):
             if has_info_subs:
                 # send out info images
                 img_unregistered_img, img_registered_img = self.get_info_images()
-                self.pub_info_unregistered.publish(self.cv_bridge.cv2_to_imgmsg(img_unregistered_img))
-                self.pub_info_registered.publish(self.cv_bridge.cv2_to_imgmsg(img_registered_img))
+                self.pub_info_unregistered.publish(self.cv_bridge.cv2_to_imgmsg(img_unregistered_img, "rgb8"))
+                self.pub_info_registered.publish(self.cv_bridge.cv2_to_imgmsg(img_registered_img, "rgb8"))
 
     def get_info_images(self):
         '''generates one registered and one unregistered blended image of rgb and depth image'''
