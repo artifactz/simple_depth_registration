@@ -159,7 +159,7 @@ class DepthRegisterNode(object):
         depth_image = self.depth_image / (clipping_distance * self.dr.depth_scale) * 255.
         depth_image[depth_image > 255] = 255
         # resize to fit rgb image and convert to 24-bit bgr
-        depth_image = cv2.cvtColor(cv2.resize(depth_image.astype('uint8'), (self.rgb_image.shape[1], self.rgb_image.shape[0]), cv2.INTER_NEAREST), cv2.COLOR_GRAY2BGR)
+        depth_image = cv2.cvtColor(cv2.resize(depth_image.astype('uint8'), (self.rgb_image.shape[1], self.rgb_image.shape[0]), interpolation=cv2.INTER_NEAREST), cv2.COLOR_GRAY2BGR)
 
         # clip
         registered_depth_image = self.registered_depth_image.astype(float) * 255. / clipping_distance
