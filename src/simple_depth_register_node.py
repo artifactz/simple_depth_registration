@@ -36,23 +36,34 @@ class DepthRegisterer(object):
                 np.array([np.arange(depth_image.shape[1]) for _ in xrange(depth_image.shape[0])])
                 ), axis=2)
 
-        registered_depth_image = np.zeros(rgb_image.shape[:2], dtype='float32')
-
         fx_rgb, fy_rgb, cx_rgb, cy_rgb = self.intrinsics['rgb']
         fx_d, fy_d, cx_d, cy_d = self.intrinsics['depth']
         x_offset, y_offset, z_offset = self.extrinsics
+
+        # compute the exact usable (mapped to) size of the registered depth image wrt. the FOVs of the cameras to avoid
+        # gaps in the registered depth image (columns/rows without values). later, the registered depth image gets
+        # scaled to match the size of the rgb image.
+        h = int(depth_image.shape[0] * (rgb_image.shape[0] / fy_rgb) / (depth_image.shape[0] / fy_d))
+        w = int(depth_image.shape[1] * (rgb_image.shape[1] / fx_rgb) / (depth_image.shape[1] / fx_d))
+        registered_depth_image = np.zeros((h, w), dtype='float32')
 
         # only consider pixels where actual depth values exist
         valid_depths = depth_image > 0
         valid_pixels = self.pixel_grid[valid_depths]
         # might seem a little nasty, but computes the registered depth numpy-efficiently
+        # apply scaling and extrinsics to depth values
         zs = depth_image[valid_depths] / self.depth_scale + z_offset
-        ys = (((((valid_pixels[:, 0] - cy_d) * zs) / fy_d + y_offset) * fy_rgb / zs + cy_rgb)).astype('int')
-        xs = (((((valid_pixels[:, 1] - cx_d) * zs) / fx_d + x_offset) * fx_rgb / zs + cx_rgb)).astype('int')
+        # apply depth cam intrinsics, extrinsics, rgb cam intrinsics, scale down to (w, h)
+        ys = (((((valid_pixels[:, 0] - cy_d) * zs) / fy_d + y_offset) * fy_rgb / zs + cy_rgb) / rgb_image.shape[0] * h).astype('int')
+        xs = (((((valid_pixels[:, 1] - cx_d) * zs) / fx_d + x_offset) * fx_rgb / zs + cx_rgb) / rgb_image.shape[1] * w).astype('int')
         # discard depth values unseen by rgb camera
         valid_positions = np.logical_and(np.logical_and(np.logical_and(ys >= 0, ys < registered_depth_image.shape[0]), xs >= 0), xs < registered_depth_image.shape[1])
 
         registered_depth_image[ys[valid_positions], xs[valid_positions]] = zs[valid_positions]
+
+        # scale up without smoothing to match rgb image
+        registered_depth_image = cv2.resize(registered_depth_image, (rgb_image.shape[1], rgb_image.shape[0]), interpolation=cv2.INTER_NEAREST)
+
         return registered_depth_image
 
 
