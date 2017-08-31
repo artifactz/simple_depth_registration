@@ -8,13 +8,36 @@ An existing solution (`depth_image_proc`) exists within the [`image_pipeline`](h
 
 ## Running this node
 
-The default input topics are `/camera/rgb/image_raw` and `/camera/depth/image_raw` respectively, but can be changed via ros params (see example launch file).
+See the [example launch file](launch/realsense_r200.launch).
 
-The registered depth image is published via the topic `/simple_depth_registration/depth_registered`, but can be customized, too.
+### Subscribed topics
 
-The extrinsics (offset from RGB camera to IR camera) are set via `x_offset`, `y_offset` and `z_offset`. The intrinsics are fetched automatically via `camera_info` topics.
+* `/camera/rgb/image_raw` (`sensor_msgs/Image`)
+  RGB camera images
+* `/camera/depth/image_raw` (`sensor_msgs/Image`)
+  depth images
 
-For testing purposes there are two additional image topics to watch: `/simple_depth_registration/info_image_unregistered` and `/simple_depth_registration/info_image_registered`, which are rgb and (un)registered depth image blended together.
+### Published topics
+
+* `/simple_depth_registration/depth_registered` (`sensor_msgs/Image`)
+  registered depth image
+* `/simple_depth_registration/info_image_unregistered` (`sensor_msgs/Image`)
+  the rgb image and the unregistered depth image blended together (for testing purposes)
+* `/simple_depth_registration/info_image_registered` (`sensor_msgs/Image`)
+  the rgb image and the registered depth image blended together
+
+### Parameters
+
+* `x_offset`, `y_offset` and `z_offset` (`float`, default: `0.0`)
+  extrinsics (offset from RGB camera to IR camera)
+* `depth_scale` (`float`, default: `1000.0`)
+  Depth values are treated as scaled by this value, which means all depth values are divided by it and then expected to be metric.
+* `rgb_topic` (`string`, default: `/camera/rgb/image_raw`)
+  overrides RGB input topic name
+* `depth_topic` (`string`, default: `/camera/depth/image_raw`)
+  overrides depth input topic name
+* `registered_topic` (`string`, default: `~depth_registered`)
+  overrides registered depth output topic name
 
 ## Dependencies
 
